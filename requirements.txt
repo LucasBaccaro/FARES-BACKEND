@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+openai
+python-dotenv
+pydantic
+httpx
+requests
+google-auth
+google-auth-oauthlib
+google-api-python-client
