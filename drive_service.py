@@ -6,9 +6,7 @@ Permite buscar en múltiples carpetas específicas de Diego Fares
 import os
 import json
 from typing import List, Optional, Dict, Any
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from dotenv import load_dotenv
@@ -42,27 +40,53 @@ class DriveSearchService:
             print(f"  {nombre}: {valor}")
 
     def _get_drive_service(self):
-        """Crear y autenticar el servicio de Google Drive"""
-        creds = None
+        """Crear y autenticar el servicio de Google Drive usando Service Account"""
 
-        # Buscar token guardado
+        # Primero intentar usar Service Account (para Railway)
+        service_account_info = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON')
+        if service_account_info:
+            try:
+                # Parsear el JSON desde variable de entorno
+                service_account_data = json.loads(service_account_info)
+                credentials = service_account.Credentials.from_service_account_info(
+                    service_account_data, scopes=SCOPES
+                )
+                print("OK: Usando Service Account desde variable de entorno")
+                return build('drive', 'v3', credentials=credentials)
+            except Exception as e:
+                print(f"ERROR: Error con Service Account: {e}")
+
+        # Fallback: buscar archivo service-account.json local
+        if os.path.exists('service-account.json'):
+            try:
+                credentials = service_account.Credentials.from_service_account_file(
+                    'service-account.json', scopes=SCOPES
+                )
+                print("OK: Usando Service Account desde archivo local")
+                return build('drive', 'v3', credentials=credentials)
+            except Exception as e:
+                print(f"ERROR: Error con archivo Service Account: {e}")
+
+        # Último fallback: OAuth (solo para desarrollo local)
+        print("WARNING: Service Account no encontrado, usando OAuth (solo desarrollo local)")
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
+
+        creds = None
         if os.path.exists('token.json'):
             creds = Credentials.from_authorized_user_file('token.json', SCOPES)
 
-        # Si no hay credenciales válidas, solicitar autorización
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
-                # Necesitarás crear credentials.json desde Google Cloud Console
-                flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-                # Usar puerto específico y mostrar la URL
-                creds = flow.run_local_server(port=8080,
-                                            open_browser=True,
-                                            access_type='offline',
-                                            prompt='consent')
+                if not os.path.exists('credentials.json'):
+                    raise Exception("ERROR: No se encontro credentials.json para OAuth")
 
-            # Guardar las credenciales para la próxima ejecución
+                flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+                creds = flow.run_local_server(port=8080, open_browser=True)
+
             with open('token.json', 'w') as token:
                 token.write(creds.to_json())
 

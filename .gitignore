@@ -3,9 +3,10 @@
 .env.local
 .env.production
 
-# Google OAuth tokens and credentials
+# Google OAuth tokens and credentials (replaced by Service Account)
 token.json
 credentials.json
+service-account.json
 
 # Python cache
 __pycache__/
