@@ -117,7 +117,7 @@ class OpenAIService:
             while iterations < max_iterations:
                 run_status = self.client.beta.threads.runs.retrieve(
                     thread_id=thread_id,
-                    run_id=run.id
+                    run_id=run.id,
                 )
 
                 if run_status.status in ["completed", "failed", "cancelled"]:
@@ -148,6 +148,9 @@ class OpenAIService:
             # Procesar citas
             citations = []
             response_text = ""
+            file_cache = {}  # Cache para evitar múltiples llamadas al mismo archivo
+            citation_mapping = {}  # Mapeo de números originales a nuevos
+            seen_files = {}  # Track de archivos ya citados para evitar duplicados
 
             if assistant_message and assistant_message.content:
                 text_content = assistant_message.content[0]
@@ -160,28 +163,57 @@ class OpenAIService:
                             if hasattr(annotation, 'file_citation'):
                                 file_citation = annotation.file_citation
 
-                                # Obtener nombre del archivo
-                                try:
-                                    file_info = self.client.files.retrieve(file_citation.file_id)
-                                    file_name = file_info.filename
-                                except Exception:
-                                    file_name = f"Archivo {file_citation.file_id[-8:]}"
+                                # Obtener nombre del archivo (con cache)
+                                if file_citation.file_id in file_cache:
+                                    file_name = file_cache[file_citation.file_id]
+                                else:
+                                    try:
+                                        file_info = self.client.files.retrieve(file_citation.file_id)
+                                        file_name = file_info.filename
+                                        file_cache[file_citation.file_id] = file_name
+                                    except Exception:
+                                        file_name = f"Archivo {file_citation.file_id[-8:]}"
+                                        file_cache[file_citation.file_id] = file_name
 
-                                # Reemplazar marcador en el texto
+                                # Número original de la cita
                                 original_marker = annotation.text
-                                new_marker = f"[{i + 1}]"
-                                response_text = response_text.replace(original_marker, new_marker)
 
                                 # Obtener link de descarga
                                 download_link = self.source_linker.get_download_link(file_name)
 
-                                citations.append(Citation(
-                                    file_id=file_citation.file_id,
-                                    file_name=file_name,
-                                    quote=getattr(file_citation, 'quote', ''),
-                                    text=new_marker,
-                                    download_link=download_link
-                                ))
+                                # Solo agregar cita si tiene download_link válido
+                                if download_link:
+                                    # Verificar si ya vimos este archivo
+                                    if file_citation.file_id in seen_files:
+                                        # Reusar el número de la primera aparición
+                                        existing_marker = seen_files[file_citation.file_id]
+                                        citation_mapping[original_marker] = existing_marker
+                                        logger.info(f"↻ Duplicate citation reused: {file_name} -> {existing_marker}")
+                                    else:
+                                        # Nuevo número basado en el índice del array filtrado
+                                        new_number = len(citations) + 1
+                                        new_marker = f"[{new_number}]"
+
+                                        # Guardar mapeo para renumerar después
+                                        citation_mapping[original_marker] = new_marker
+                                        seen_files[file_citation.file_id] = new_marker
+
+                                        citations.append(Citation(
+                                            file_id=file_citation.file_id,
+                                            file_name=file_name,
+                                            quote="",
+                                            text=new_marker,
+                                            download_link=download_link
+                                        ))
+                                        logger.info(f"✓ Citation {new_number}: {file_name}")
+                                else:
+                                    # Marcar para eliminar del texto
+                                    citation_mapping[original_marker] = ""
+                                    logger.warning(f"✗ Skipped citation (no link): {file_name} | Marker: {original_marker}")
+
+                    # Renumerar todas las citas en el texto
+                    for original_marker, new_marker in citation_mapping.items():
+                        response_text = response_text.replace(original_marker, new_marker)
 
             logger.info(f"Generated response with {len(citations)} citations")
 
