@@ -22,6 +22,18 @@ class DriveSearchService:
     def __init__(self):
         """Inicializar el servicio de Google Drive"""
         self.service = self._get_drive_service()
+        
+        # Cargar el archivo de fuentes
+        try:
+            with open('fuente_agente.json', 'r', encoding='utf-8') as f:
+                self.fuentes = json.load(f)
+            # Crear diccionario para búsqueda rápida
+            self.file_to_title = {item["file"]: item["title"] for item in self.fuentes if "file" in item and "title" in item}
+            print(f"Cargadas {len(self.file_to_title)} fuentes de fuente_agente.json")
+        except Exception as e:
+            print(f"Error cargando fuente_agente.json: {e}")
+            self.fuentes = []
+            self.file_to_title = {}
 
         # Configuración de carpetas desde variables de entorno
         self.carpetas = {
@@ -116,9 +128,14 @@ class DriveSearchService:
 
                 # Formatear y agregar resultados
                 for archivo in archivos:
+                    file_name = archivo.get('name')
+                    # Buscar el título en el archivo de fuentes
+                    display_name = self.file_to_title.get(file_name, file_name)
+                    
                     archivos_formateados.append({
                         "id": archivo.get('id'),
-                        "name": archivo.get('name'),
+                        "name": display_name,  # Usar el título en lugar del nombre del archivo
+                        "original_name": file_name,  # Mantener el nombre original por si acaso
                         "view_link": archivo.get('webViewLink'),
                         "download_link": f"https://drive.google.com/file/d/{archivo.get('id')}/view",
                         "mime_type": archivo.get('mimeType'),
@@ -186,9 +203,14 @@ class DriveSearchService:
                 archivos = results.get('files', [])
 
                 for archivo in archivos:
+                    file_name = archivo.get('name')
+                    # Buscar el título en el archivo de fuentes
+                    display_name = self.file_to_title.get(file_name, file_name)
+                    
                     archivos_formateados.append({
                         "id": archivo.get('id'),
-                        "name": archivo.get('name'),
+                        "name": display_name,  # Usar el título en lugar del nombre del archivo
+                        "original_name": file_name,  # Mantener el nombre original por si acaso
                         "view_link": archivo.get('webViewLink'),
                         "download_link": f"https://drive.google.com/file/d/{archivo.get('id')}/view",
                         "mime_type": archivo.get('mimeType'),

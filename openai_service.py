@@ -35,20 +35,22 @@ class ChatResponse:
 
 
 class SourceLinker:
-    def __init__(self, json_path: str = "json.json"):
+    def __init__(self, json_path: str = "fuente_agente.json"):
         """Cargar archivo JSON con referencias a fuentes"""
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
                 self.reference_data = json.load(f)
 
-            # Crear diccionario de lookup para búsqueda O(1)
-            self.title_to_link = {}
+            # Crear diccionarios de lookup para búsqueda O(1)
+            self.file_to_info = {}  # Mapea nombre de archivo a {title, link}
+            self.title_to_info = {}  # Mapea título a {file, link}
             valid_items = 0
             invalid_items = 0
 
             for i, item in enumerate(self.reference_data):
-                if isinstance(item, dict) and "titulo" in item and "link" in item:
-                    self.title_to_link[item["titulo"]] = item["link"]
+                if isinstance(item, dict) and "file" in item and "link" in item and "title" in item:
+                    self.file_to_info[item["file"]] = {"title": item["title"], "link": item["link"]}
+                    self.title_to_info[item["title"]] = {"file": item["file"], "link": item["link"]}
                     valid_items += 1
                 else:
                     logger.warning(f"Invalid item at index {i}: {item}")
@@ -65,9 +67,9 @@ class SourceLinker:
             self.reference_data = []
             self.title_to_link = {}
 
-    def get_download_link(self, filename: str) -> Optional[str]:
-        """Obtener link de descarga para un archivo específico"""
-        return self.title_to_link.get(filename)
+    def get_file_info(self, filename: str) -> Optional[dict]:
+        """Obtener información (título y link) para un archivo específico"""
+        return self.file_to_info.get(filename)
 
 
 class OpenAIService:
@@ -178,11 +180,13 @@ class OpenAIService:
                                 # Número original de la cita
                                 original_marker = annotation.text
 
-                                # Obtener link de descarga
-                                download_link = self.source_linker.get_download_link(file_name)
+                                # Obtener información del archivo (título y link)
+                                file_info = self.source_linker.get_file_info(file_name)
 
-                                # Solo agregar cita si tiene download_link válido
-                                if download_link:
+                                # Solo agregar cita si tenemos la información
+                                if file_info:
+                                    title = file_info["title"]
+                                    download_link = file_info["link"]
                                     # Verificar si ya vimos este archivo
                                     if file_citation.file_id in seen_files:
                                         # Reusar el número de la primera aparición
@@ -200,7 +204,7 @@ class OpenAIService:
 
                                         citations.append(Citation(
                                             file_id=file_citation.file_id,
-                                            file_name=file_name,
+                                            file_name=title,  # Usar el título en lugar del nombre del archivo
                                             quote="",
                                             text=new_marker,
                                             download_link=download_link
