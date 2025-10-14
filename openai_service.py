@@ -181,7 +181,8 @@ class OpenAIService:
                                 original_marker = annotation.text
 
                                 # Obtener link de descarga y título
-                                source_info = self.source_linker.get_source_info(file_name)
+                                file_name_base, _ = os.path.splitext(file_name)
+                                source_info = self.source_linker.get_source_info(file_name_base)
 
                                 # Solo agregar cita si tiene source_info válido
                                 if source_info:
