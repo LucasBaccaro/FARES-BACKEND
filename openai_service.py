@@ -19,12 +19,13 @@ logger = logging.getLogger(__name__)
 
 
 class Citation:
-    def __init__(self, file_id: str, file_name: str, quote: str, text: str, download_link: Optional[str] = None):
+    def __init__(self, file_id: str, file_name: str, quote: str, text: str, download_link: Optional[str] = None, title: Optional[str] = None):
         self.file_id = file_id
         self.file_name = file_name
         self.quote = quote
         self.text = text
         self.download_link = download_link
+        self.title = title
 
 
 class ChatResponse:
@@ -35,39 +36,39 @@ class ChatResponse:
 
 
 class SourceLinker:
-    def __init__(self, json_path: str = "json.json"):
+    def __init__(self, json_path: str = "fuente_agente_v1.json"):
         """Cargar archivo JSON con referencias a fuentes"""
         try:
             with open(json_path, 'r', encoding='utf-8') as f:
                 self.reference_data = json.load(f)
 
             # Crear diccionario de lookup para búsqueda O(1)
-            self.title_to_link = {}
+            self.file_to_source_info = {}
             valid_items = 0
             invalid_items = 0
 
             for i, item in enumerate(self.reference_data):
-                if isinstance(item, dict) and "titulo" in item and "link" in item:
-                    self.title_to_link[item["titulo"]] = item["link"]
+                if isinstance(item, dict) and "file" in item and "link" in item and "title" in item:
+                    self.file_to_source_info[item["file"]] = {"link": item["link"], "title": item["title"]}
                     valid_items += 1
                 else:
                     logger.warning(f"Invalid item at index {i}: {item}")
                     invalid_items += 1
-
+            
             logger.info(f"Loaded {len(self.reference_data)} total items, {valid_items} valid, {invalid_items} invalid")
 
         except FileNotFoundError:
             logger.error(f"Reference file not found: {json_path}")
             self.reference_data = []
-            self.title_to_link = {}
+            self.file_to_source_info = {}
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON: {e}")
             self.reference_data = []
-            self.title_to_link = {}
+            self.file_to_source_info = {}
 
-    def get_download_link(self, filename: str) -> Optional[str]:
-        """Obtener link de descarga para un archivo específico"""
-        return self.title_to_link.get(filename)
+    def get_source_info(self, filename: str) -> Optional[dict]:
+        """Obtener link de descarga y título para un archivo específico"""
+        return self.file_to_source_info.get(filename)
 
 
 class OpenAIService:
@@ -178,11 +179,13 @@ class OpenAIService:
                                 # Número original de la cita
                                 original_marker = annotation.text
 
-                                # Obtener link de descarga
-                                download_link = self.source_linker.get_download_link(file_name)
+                                # Obtener link de descarga y título
+                                source_info = self.source_linker.get_source_info(file_name)
 
-                                # Solo agregar cita si tiene download_link válido
-                                if download_link:
+                                # Solo agregar cita si tiene source_info válido
+                                if source_info:
+                                    download_link = source_info.get("link")
+                                    title = source_info.get("title")
                                     # Verificar si ya vimos este archivo
                                     if file_citation.file_id in seen_files:
                                         # Reusar el número de la primera aparición
@@ -203,7 +206,8 @@ class OpenAIService:
                                             file_name=file_name,
                                             quote="",
                                             text=new_marker,
-                                            download_link=download_link
+                                            download_link=download_link,
+                                            title=title
                                         ))
                                         logger.info(f"✓ Citation {new_number}: {file_name}")
                                 else:

@@ -95,19 +95,26 @@ class DriveSearchService:
     def buscar_en_carpeta(self, query: str, carpeta_id: str) -> List[Dict]:
         """Buscar archivos en una carpeta específica"""
         try:
-            # Construir query de búsqueda
-            search_query = f"name contains '{query}' and parents in '{carpeta_id}'"
+            # Construir query de búsqueda para full-text search
+            search_query = f"fullText contains '{query}' and parents in '{carpeta_id}'"
 
             print(f"DEBUG: Buscando en carpeta {carpeta_id} con query: {search_query}")
 
-            # Ejecutar búsqueda
-            results = self.service.files().list(
-                q=search_query,
-                pageSize=50,
-                fields="nextPageToken, files(id, name, webViewLink, webContentLink, mimeType, size, modifiedTime)"
-            ).execute()
+            # Ejecutar búsqueda con paginación
+            archivos = []
+            page_token = None
+            while True:
+                results = self.service.files().list(
+                    q=search_query,
+                    pageSize=100,
+                    fields="nextPageToken, files(id, name, webViewLink, webContentLink, mimeType, size, modifiedTime)",
+                    pageToken=page_token
+                ).execute()
 
-            archivos = results.get('files', [])
+                archivos.extend(results.get('files', []))
+                page_token = results.get('nextPageToken', None)
+                if page_token is None:
+                    break
             print(f"DEBUG: Encontrados {len(archivos)} archivos")
 
             # Formatear resultados
@@ -150,18 +157,25 @@ class DriveSearchService:
         print(f"DEBUG: Carpetas cargadas: {self.carpetas}")
         return {k: v for k, v in self.carpetas.items() if v and v != 'None'}
 
-    def obtener_archivos_de_carpeta(self, carpeta_id: str, limite: int = 50) -> List[Dict]:
-        """Obtener todos los archivos de una carpeta específica"""
+    def obtener_archivos_de_carpeta(self, carpeta_id: str) -> List[Dict]:
+        """Obtener todos los archivos de una carpeta específica, manejando paginación"""
         try:
             query = f"parents in '{carpeta_id}'"
 
-            results = self.service.files().list(
-                q=query,
-                pageSize=limite,
-                fields="nextPageToken, files(id, name, webViewLink, webContentLink, mimeType, size, modifiedTime)"
-            ).execute()
+            archivos = []
+            page_token = None
+            while True:
+                results = self.service.files().list(
+                    q=query,
+                    pageSize=100,
+                    fields="nextPageToken, files(id, name, webViewLink, webContentLink, mimeType, size, modifiedTime)",
+                    pageToken=page_token
+                ).execute()
 
-            archivos = results.get('files', [])
+                archivos.extend(results.get('files', []))
+                page_token = results.get('nextPageToken', None)
+                if page_token is None:
+                    break
 
             archivos_formateados = []
             for archivo in archivos:
