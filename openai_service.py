@@ -49,7 +49,9 @@ class SourceLinker:
 
             for i, item in enumerate(self.reference_data):
                 if isinstance(item, dict) and "file" in item and "link" in item and "title" in item:
-                    self.file_to_source_info[item["file"]] = {"link": item["link"], "title": item["title"]}
+                    json_filename = item["file"]
+                    filename_base, _ = os.path.splitext(json_filename)
+                    self.file_to_source_info[filename_base] = {"link": item["link"], "title": item["title"]}
                     valid_items += 1
                 else:
                     logger.warning(f"Invalid item at index {i}: {item}")

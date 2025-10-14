@@ -97,8 +97,9 @@ class DriveSearchService:
     def _format_file_response(self, archivo: Dict) -> Dict:
         """Formatear un archivo individual, reemplazando el nombre con el título si se encuentra."""
         drive_filename = archivo.get('name')
+        drive_filename_base, _ = os.path.splitext(drive_filename)
         
-        source_info = self.source_linker.get_source_info(drive_filename) if hasattr(self, 'source_linker') else None
+        source_info = self.source_linker.get_source_info(drive_filename_base) if hasattr(self, 'source_linker') else None
         
         display_name = source_info.get('title') if source_info and source_info.get('title') else drive_filename
 
