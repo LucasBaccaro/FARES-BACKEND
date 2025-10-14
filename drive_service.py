@@ -10,7 +10,6 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from dotenv import load_dotenv
-from openai_service import SourceLinker
 
 # Cargar variables de entorno
 load_dotenv()
@@ -23,7 +22,6 @@ class DriveSearchService:
     def __init__(self):
         """Inicializar el servicio de Google Drive"""
         self.service = self._get_drive_service()
-        self.source_linker = SourceLinker()
 
         # Configuración de carpetas desde variables de entorno
         self.carpetas = {
@@ -94,25 +92,6 @@ class DriveSearchService:
 
         return build('drive', 'v3', credentials=creds)
 
-    def _format_file_response(self, archivo: Dict) -> Dict:
-        """Formatear un archivo individual, reemplazando el nombre con el título si se encuentra."""
-        drive_filename = archivo.get('name')
-        drive_filename_base, _ = os.path.splitext(drive_filename)
-        
-        source_info = self.source_linker.get_source_info(drive_filename_base) if hasattr(self, 'source_linker') else None
-        
-        display_name = source_info.get('title') if source_info and source_info.get('title') else drive_filename
-
-        return {
-            "id": archivo.get('id'),
-            "name": display_name,
-            "view_link": archivo.get('webViewLink'),
-            "download_link": f"https://drive.google.com/file/d/{archivo.get('id')}/view",
-            "mime_type": archivo.get('mimeType'),
-            "size": archivo.get('size'),
-            "modified_time": archivo.get('modifiedTime')
-        }
-
     def buscar_en_carpeta(self, query: str, carpeta_id: str) -> List[Dict]:
         """Buscar archivos en una carpeta específica"""
         try:
@@ -141,7 +120,17 @@ class DriveSearchService:
             print(f"DEBUG: Encontrados {len(archivos)} archivos")
 
             # Formatear resultados
-            archivos_formateados = [self._format_file_response(archivo) for archivo in archivos]
+            archivos_formateados = []
+            for archivo in archivos:
+                archivos_formateados.append({
+                    "id": archivo.get('id'),
+                    "name": archivo.get('name'),
+                    "view_link": archivo.get('webViewLink'),
+                    "download_link": f"https://drive.google.com/file/d/{archivo.get('id')}/view",
+                    "mime_type": archivo.get('mimeType'),
+                    "size": archivo.get('size'),
+                    "modified_time": archivo.get('modifiedTime')
+                })
 
             return archivos_formateados
 

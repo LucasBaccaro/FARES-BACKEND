@@ -39,7 +39,6 @@ class Citation(BaseModel):
     quote: str
     text: str
     download_link: Optional[str] = None
-    title: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -79,8 +78,7 @@ async def ask_openai(req: MessageRequest):
                 file_name=citation.file_name,
                 quote=citation.quote,
                 text=citation.text,
-                download_link=citation.download_link,
-                title=citation.title
+                download_link=citation.download_link
             )
             for citation in result.citations
         ]

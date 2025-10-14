@@ -19,13 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 class Citation:
-    def __init__(self, file_id: str, file_name: str, quote: str, text: str, download_link: Optional[str] = None, title: Optional[str] = None):
+    def __init__(self, file_id: str, file_name: str, quote: str, text: str, download_link: Optional[str] = None):
         self.file_id = file_id
         self.file_name = file_name
         self.quote = quote
         self.text = text
         self.download_link = download_link
-        self.title = title
 
 
 class ChatResponse:
@@ -208,8 +207,7 @@ class OpenAIService:
                                             file_name=file_name,
                                             quote="",
                                             text=new_marker,
-                                            download_link=download_link,
-                                            title=title
+                                            download_link=download_link
                                         ))
                                         logger.info(f"✓ Citation {new_number}: {file_name}")
                                 else:
