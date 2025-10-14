@@ -10,6 +10,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from dotenv import load_dotenv
+from openai_service import SourceLinker
 
 # Cargar variables de entorno
 load_dotenv()
@@ -22,6 +23,7 @@ class DriveSearchService:
     def __init__(self):
         """Inicializar el servicio de Google Drive"""
         self.service = self._get_drive_service()
+        self.source_linker = SourceLinker()
 
         # Configuración de carpetas desde variables de entorno
         self.carpetas = {
@@ -92,11 +94,31 @@ class DriveSearchService:
 
         return build('drive', 'v3', credentials=creds)
 
+    def _format_file_response(self, archivo: Dict) -> Dict:
+        """Formatear un archivo individual, reemplazando el nombre con el título si se encuentra."""
+        drive_filename = archivo.get('name')
+        
+        source_info = self.source_linker.get_source_info(drive_filename) if hasattr(self, 'source_linker') else None
+        
+        display_name = source_info.get('title') if source_info and source_info.get('title') else drive_filename
+
+        return {
+            "id": archivo.get('id'),
+            "name": display_name,
+            "view_link": archivo.get('webViewLink'),
+            "download_link": f"https://drive.google.com/file/d/{archivo.get('id')}/view",
+            "mime_type": archivo.get('mimeType'),
+            "size": archivo.get('size'),
+            "modified_time": archivo.get('modifiedTime')
+        }
+
     def buscar_en_carpeta(self, query: str, carpeta_id: str) -> List[Dict]:
         """Buscar archivos en una carpeta específica"""
         try:
-            # Construir query de búsqueda para full-text search
-            search_query = f"fullText contains '{query}' and parents in '{carpeta_id}'"
+            # Construir query de búsqueda
+            search_query = f"parents in '{carpeta_id}'"
+            if query and query != '*':
+                search_query += f" and fullText contains '{query}'"
 
             print(f"DEBUG: Buscando en carpeta {carpeta_id} con query: {search_query}")
 
@@ -118,17 +140,7 @@ class DriveSearchService:
             print(f"DEBUG: Encontrados {len(archivos)} archivos")
 
             # Formatear resultados
-            archivos_formateados = []
-            for archivo in archivos:
-                archivos_formateados.append({
-                    "id": archivo.get('id'),
-                    "name": archivo.get('name'),
-                    "view_link": archivo.get('webViewLink'),
-                    "download_link": f"https://drive.google.com/file/d/{archivo.get('id')}/view",
-                    "mime_type": archivo.get('mimeType'),
-                    "size": archivo.get('size'),
-                    "modified_time": archivo.get('modifiedTime')
-                })
+            archivos_formateados = [self._format_file_response(archivo) for archivo in archivos]
 
             return archivos_formateados
 
@@ -152,48 +164,13 @@ class DriveSearchService:
 
         return resultados
 
-    def listar_carpetas_disponibles(self) -> Dict[str, str]:
-        """Devolver las carpetas configuradas"""
-        print(f"DEBUG: Carpetas cargadas: {self.carpetas}")
-        return {k: v for k, v in self.carpetas.items() if v and v != 'None'}
+        def listar_carpetas_disponibles(self) -> Dict[str, str]:
 
-    def obtener_archivos_de_carpeta(self, carpeta_id: str) -> List[Dict]:
-        """Obtener todos los archivos de una carpeta específica, manejando paginación"""
-        try:
-            query = f"parents in '{carpeta_id}'"
+            """Devolver las carpetas configuradas"""
 
-            archivos = []
-            page_token = None
-            while True:
-                results = self.service.files().list(
-                    q=query,
-                    pageSize=100,
-                    fields="nextPageToken, files(id, name, webViewLink, webContentLink, mimeType, size, modifiedTime)",
-                    pageToken=page_token
-                ).execute()
+            print(f"DEBUG: Carpetas cargadas: {self.carpetas}")
 
-                archivos.extend(results.get('files', []))
-                page_token = results.get('nextPageToken', None)
-                if page_token is None:
-                    break
-
-            archivos_formateados = []
-            for archivo in archivos:
-                archivos_formateados.append({
-                    "id": archivo.get('id'),
-                    "name": archivo.get('name'),
-                    "view_link": archivo.get('webViewLink'),
-                    "download_link": f"https://drive.google.com/file/d/{archivo.get('id')}/view",
-                    "mime_type": archivo.get('mimeType'),
-                    "size": archivo.get('size'),
-                    "modified_time": archivo.get('modifiedTime')
-                })
-
-            return archivos_formateados
-
-        except Exception as error:
-            print(f"Error obteniendo archivos: {error}")
-            return []
+            return {k: v for k, v in self.carpetas.items() if v and v != 'None'}
 
 
 # Instancia global del servicio
