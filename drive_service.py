@@ -28,8 +28,31 @@ class DriveSearchService:
             with open('fuente_agente.json', 'r', encoding='utf-8') as f:
                 self.fuentes = json.load(f)
             # Crear diccionario para búsqueda rápida
-            self.file_to_title = {item["file"]: item["title"] for item in self.fuentes if "file" in item and "title" in item}
-            print(f"Cargadas {len(self.file_to_title)} fuentes de fuente_agente.json")
+            # Además crear un mapping normalizado (sin extensión, en minúsculas) para tolerar diferencias de extensión
+            def _normalize(name: str) -> str:
+                if not isinstance(name, str):
+                    return ""
+                # quitar extensión final (.txt, .pdf, etc.)
+                base = name.rsplit('.', 1)[0]
+                # normalizar separadores y espacios y pasar a minúsculas
+                normalized = base.replace(' ', '_').replace('-', '_').lower()
+                return normalized
+
+            self.file_to_title = {}
+            self.normalized_to_title = {}
+            for item in self.fuentes:
+                if not isinstance(item, dict):
+                    continue
+                file_name = item.get("file")
+                title = item.get("title")
+                if file_name and title:
+                    self.file_to_title[file_name] = title
+                    norm = _normalize(file_name)
+                    # Guardar mapping normalizado si no existe (primer match wins)
+                    if norm and norm not in self.normalized_to_title:
+                        self.normalized_to_title[norm] = title
+
+            print(f"Cargadas {len(self.file_to_title)} fuentes de fuente_agente.json (norm keys: {len(self.normalized_to_title)})")
         except Exception as e:
             print(f"Error cargando fuente_agente.json: {e}")
             self.fuentes = []
@@ -104,6 +127,25 @@ class DriveSearchService:
 
         return build('drive', 'v3', credentials=creds)
 
+    def _lookup_title(self, file_name: str) -> str:
+        """Intentar obtener el título para un nombre de archivo.
+
+        Primero busca por nombre exacto. Si no encuentra, intenta con la clave normalizada (sin extensión, minúsculas).
+        Si no encuentra nada, devuelve el file_name original.
+        """
+        if not file_name:
+            return file_name
+
+        # búsqueda exacta
+        title = self.file_to_title.get(file_name)
+        if title:
+            return title
+
+        # normalizar y buscar
+        base = file_name.rsplit('.', 1)[0]
+        norm = base.replace(' ', '_').replace('-', '_').lower()
+        return self.normalized_to_title.get(norm, file_name)
+
     def buscar_en_carpeta(self, query: str, carpeta_id: str) -> List[Dict]:
         """Buscar archivos en una carpeta específica usando full-text search y paginación."""
         archivos_formateados = []
@@ -129,8 +171,8 @@ class DriveSearchService:
                 # Formatear y agregar resultados
                 for archivo in archivos:
                     file_name = archivo.get('name')
-                    # Buscar el título en el archivo de fuentes
-                    display_name = self.file_to_title.get(file_name, file_name)
+                    # Buscar el título en el archivo de fuentes (tolerante a extensiones)
+                    display_name = self._lookup_title(file_name)
                     
                     archivos_formateados.append({
                         "id": archivo.get('id'),
@@ -204,8 +246,8 @@ class DriveSearchService:
 
                 for archivo in archivos:
                     file_name = archivo.get('name')
-                    # Buscar el título en el archivo de fuentes
-                    display_name = self.file_to_title.get(file_name, file_name)
+                    # Buscar el título en el archivo de fuentes (tolerante a extensiones)
+                    display_name = self._lookup_title(file_name)
                     
                     archivos_formateados.append({
                         "id": archivo.get('id'),
